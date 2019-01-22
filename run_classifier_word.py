@@ -21,10 +21,17 @@ from __future__ import print_function
 import collections
 import csv
 import os
+import logging
 import modeling
 import optimization
-import tokenization
+import tokenization_word as tokenization
 import tensorflow as tf
+
+logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
+                    datefmt = '%m/%d/%Y %H:%M:%S',
+                    level = logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 flags = tf.flags
 
@@ -196,13 +203,51 @@ class DataProcessor(object):
   @classmethod
   def _read_tsv(cls, input_file, quotechar=None):
     """Reads a tab separated value file."""
-    with tf.gfile.Open(input_file, "r") as f:
-      reader = csv.reader(f, delimiter="\t", quotechar=quotechar)
-      lines = []
-      for line in reader:
-        lines.append(line)
-      return lines
+    file_in = open(input_file, "rb")
+    lines = []
+    for line in file_in:
+        lines.append(line.decode("utf-8").split("\t"))
+    return lines
 
+
+class NewsProcessor(DataProcessor):
+    """Processor for the MRPC data set (GLUE version)."""
+
+    def __init__(self):
+        self.labels = set()
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {}".format(os.path.join(data_dir, "train.tsv")))
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_labels(self):
+        """See base class."""
+        #return list(self.labels)
+        return ["1", "2", "3", "4", "5"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, i)
+            text_a = tokenization.convert_to_unicode(line[5])
+            label = tokenization.convert_to_unicode(line[3])
+            self.labels.add(label)
+            #print(self.labels)
+            examples.append(
+                InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+
+
+        return examples
 
 class XnliProcessor(DataProcessor):
   """Processor for the XNLI data set."""
@@ -319,7 +364,7 @@ class MrpcProcessor(DataProcessor):
     """Creates examples for the training and dev sets."""
     examples = []
     for (i, line) in enumerate(lines):
-      if i == 0:
+      if set_type == "test" and i == 0:
         continue
       guid = "%s-%s" % (set_type, i)
       text_a = tokenization.convert_to_unicode(line[3])
@@ -360,7 +405,7 @@ class ColaProcessor(DataProcessor):
     examples = []
     for (i, line) in enumerate(lines):
       # Only the test set has a header
-      if set_type == "test" and i == 0:
+      if i == 0:
         continue
       guid = "%s-%s" % (set_type, i)
       if set_type == "test":
@@ -390,6 +435,8 @@ def convert_single_example(ex_index, example, label_list, max_seq_length,
   for (i, label) in enumerate(label_list):
     label_map[label] = i
 
+  #print(label_list)
+  #print(label_map)
   tokens_a = tokenizer.tokenize(example.text_a)
   tokens_b = None
   if example.text_b:
@@ -784,14 +831,15 @@ def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
 
   processors = {
+      "news": NewsProcessor,
       "cola": ColaProcessor,
       "mnli": MnliProcessor,
       "mrpc": MrpcProcessor,
       "xnli": XnliProcessor,
   }
 
-  tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
-                                                FLAGS.init_checkpoint)
+  #tokenization.validate_case_matches_checkpoint(FLAGS.do_lower_case,
+   #                                             FLAGS.init_checkpoint)
 
   if not FLAGS.do_train and not FLAGS.do_eval and not FLAGS.do_predict:
     raise ValueError(
