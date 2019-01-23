@@ -71,7 +71,7 @@ def load_vocab(vocab_file):
 
     index_vocab = collections.OrderedDict()
     index = 0
-    with open(vocab_file, "rb") as reader:
+    with tf.gfile.GFile(vocab_file, "r") as reader:
         while True:
             tmp = reader.readline()
             token = convert_to_unicode(tmp)
